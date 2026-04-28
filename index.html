@@ -1,0 +1,850 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ChurnGuard | Inteligência de Retenção</title>
+  
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,300..800&family=Chivo+Mono:ital,wght@0,300;0,500;1,300&family=Plus+Jakarta+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+
+  <style>
+    :root {
+      --bg-void: #030305;
+      --bg-surface: #0a0a0e;
+      --bg-glass: rgba(20, 20, 26, 0.6);
+      --bg-glass-hover: rgba(30, 30, 40, 0.8);
+      --radium: #CCFF00;
+      --radium-glow: rgba(204, 255, 0, 0.4);
+      --radium-dim: rgba(204, 255, 0, 0.1);
+      --uv: #5500FF;
+      --uv-glow: rgba(85, 0, 255, 0.3);
+      --alert: #FF2A2A;
+      --text-pure: #FFFFFF;
+      --text-muted: #8A8A98;
+      --border-subtle: rgba(255, 255, 255, 0.08);
+      --border-strong: rgba(255, 255, 255, 0.16);
+      --font-display: 'Bricolage Grotesque', sans-serif;
+      --font-mono: 'Chivo Mono', monospace;
+      --font-body: 'Plus Jakarta Sans', sans-serif;
+      --pad-x: clamp(2rem, 6vw, 6rem);
+      --pad-y-bottom: 140px; 
+      --ease-snappy: cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background-color: var(--bg-void); color: var(--text-pure);
+      font-family: var(--font-body); font-size: 16px; line-height: 1.6;
+      overflow: hidden; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale;
+    }
+    .noise-overlay {
+      position: fixed; inset: 0; z-index: 9999; pointer-events: none;
+      background: url('data:image/svg+xml;utf8,%3Csvg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg"%3E%3Cfilter id="noise"%3E%3CfeTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="3" stitchTiles="stitch"/%3E%3C/filter%3E%3Crect width="100%25" height="100%25" filter="url(%23noise)" opacity="0.06"/%3E%3C/svg%3E');
+    }
+    .ambient-glow {
+      position: fixed; top: -20vh; left: -20vw; width: 60vw; height: 60vw; border-radius: 50%;
+      background: radial-gradient(circle, var(--uv-glow) 0%, transparent 70%);
+      filter: blur(100px); z-index: 0; pointer-events: none;
+      animation: orbit 30s linear infinite alternate;
+    }
+    .ambient-glow.secondary {
+      top: auto; bottom: -20vh; left: auto; right: -20vw;
+      background: radial-gradient(circle, var(--radium-dim) 0%, transparent 70%);
+      animation: orbit-reverse 40s linear infinite alternate;
+    }
+    @keyframes orbit { 0% { transform: translate(0, 0); } 100% { transform: translate(30vw, 20vh); } }
+    @keyframes orbit-reverse { 0% { transform: translate(0, 0); } 100% { transform: translate(-30vw, -20vh); } }
+    h1, h2, h3, h4 { font-family: var(--font-display); }
+    .headline-mega { font-size: clamp(3.5rem, 9vw, 9rem); font-weight: 800; letter-spacing: -0.04em; text-transform: uppercase; position: relative; line-height: 0.95; }
+    .headline-1 { font-size: clamp(2.5rem, 5.5vw, 5.5rem); font-weight: 700; letter-spacing: -0.03em; line-height: 1.05; }
+    .headline-2 { font-size: clamp(1.8rem, 3.5vw, 3.5rem); font-weight: 600; letter-spacing: -0.02em; line-height: 1.1; }
+    .text-radium { color: var(--radium); text-shadow: 0 0 20px var(--radium-glow); }
+    .text-uv { color: #A066FF; }
+    .text-muted { color: var(--text-muted); }
+    .text-alert { color: var(--alert); }
+    .mono-label { font-family: var(--font-mono); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.2em; color: var(--text-muted); display: block; }
+    .slide-header-label { margin-top: 4.5rem; margin-bottom: 1rem; }
+    .deck-container { position: relative; width: 100vw; height: 100vh; z-index: 10; }
+    .slide {
+      position: absolute; inset: 0; padding: 120px var(--pad-x) var(--pad-y-bottom);
+      display: flex; flex-direction: column; opacity: 0; visibility: hidden;
+      transform: scale(0.95) translateY(40px);
+      transition: opacity 0.8s var(--ease-snappy), transform 0.8s var(--ease-snappy), visibility 0.8s;
+      overflow-y: auto; overflow-x: hidden;
+    }
+    .slide::-webkit-scrollbar { width: 6px; }
+    .slide::-webkit-scrollbar-track { background: transparent; }
+    .slide::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 10px; }
+    .slide.active { opacity: 1; visibility: visible; transform: scale(1) translateY(0); z-index: 20; }
+    .global-header {
+      position: fixed; top: 0; left: 0; right: 0; padding: 1.5rem var(--pad-x);
+      display: flex; justify-content: space-between; align-items: center; z-index: 100; pointer-events: none;
+      background: linear-gradient(to bottom, var(--bg-void) 40%, transparent);
+    }
+    .logo-container { display: flex; align-items: center; gap: 1rem; pointer-events: auto; }
+    .logo-svg { width: 40px; height: 40px; }
+    .logo-text { font-family: var(--font-display); font-size: 1.25rem; font-weight: 700; letter-spacing: -0.02em; }
+    .logo-text span { color: var(--radium); }
+    .nav-glass {
+      position: fixed; bottom: 2rem; left: 50%; transform: translateX(-50%);
+      background: var(--bg-glass); backdrop-filter: blur(20px); border: 1px solid var(--border-strong);
+      border-radius: 100px; padding: 0.5rem; display: flex; align-items: center; gap: 1rem; z-index: 100;
+    }
+    .nav-btn {
+      background: transparent; border: none; color: var(--text-pure); width: 40px; height: 40px;
+      border-radius: 50%; cursor: pointer; display: flex; align-items: center; justify-content: center;
+      transition: all 0.3s ease; border: 1px solid transparent;
+    }
+    .nav-btn:hover:not(:disabled) { background: var(--bg-surface); border-color: var(--radium); color: var(--radium); box-shadow: 0 0 15px var(--radium-dim); }
+    .nav-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+    .nav-indicator { font-family: var(--font-mono); font-size: 0.85rem; letter-spacing: 0.1em; padding: 0 1rem; }
+    .progress-bar-container { position: fixed; top: 0; left: 0; width: 100%; height: 3px; background: var(--bg-surface); z-index: 1000; }
+    .progress-bar-fill { height: 100%; width: 0%; background: var(--radium); box-shadow: 0 0 10px var(--radium-glow); transition: width 0.5s var(--ease-snappy); }
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 4rem; }
+    .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2rem; }
+    .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1.5rem; }
+    .glass-card {
+      background: var(--bg-glass); backdrop-filter: blur(12px); border: 1px solid var(--border-subtle);
+      border-radius: 1rem; padding: 2.5rem; position: relative; overflow: hidden;
+      transition: all 0.4s var(--ease-snappy); display: flex; flex-direction: column;
+    }
+    .glass-card:hover { border-color: var(--border-strong); transform: translateY(-5px); background: var(--bg-glass-hover); }
+    .glass-card::before {
+      content: ''; position: absolute; top: 0; left: 0; width: 100%; height: 2px;
+      background: linear-gradient(90deg, transparent, var(--radium), transparent);
+      opacity: 0; transition: opacity 0.4s ease;
+    }
+    .glass-card:hover::before { opacity: 1; }
+    .data-value { font-family: var(--font-mono); font-size: 3.5rem; font-weight: 300; line-height: 1; margin: 1rem 0; color: var(--text-pure); }
+    .data-value .data-counter { color: var(--text-pure); }
+    .data-value .unit { font-size: 1.5rem; vertical-align: super; color: var(--radium); }
+    .card-alert .data-value .data-counter { color: var(--alert) !important; }
+    .card-alert .data-value .unit { color: var(--alert) !important; }
+    .clean-dash { font-family: var(--font-body); font-weight: 400; color: var(--text-muted); margin: 0 0.5rem; }
+    .benchmark-row {
+      display: flex; justify-content: space-between; align-items: baseline; border-bottom: 1px solid var(--border-strong); 
+      padding-bottom: 0.75rem; margin-bottom: 0.75rem; font-size: 1.1rem;
+    }
+    .benchmark-row:last-of-type { border-bottom: none; margin-bottom: 0; }
+    .tag {
+      display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.4rem 0.8rem; border-radius: 4px;
+      font-family: var(--font-mono); font-size: 0.7rem; letter-spacing: 0.1em; text-transform: uppercase;
+      background: rgba(255,255,255,0.05); border: 1px solid var(--border-subtle);
+    }
+    .tag.tag-radium { background: var(--radium-dim); color: var(--radium); border-color: rgba(204,255,0,0.3); }
+    .tag.tag-alert { background: rgba(255,42,42,0.1); color: var(--alert); border-color: rgba(255,42,42,0.3); }
+    .card-citation {
+      margin-top: auto; padding-top: 1rem; border-top: 1px solid var(--border-strong);
+      font-size: 0.75rem; color: var(--text-muted); font-family: var(--font-mono);
+      letter-spacing: 0.05em; text-transform: uppercase;
+    }
+    .source-note { font-size: 0.75rem; opacity: 0.6; display: block; margin-top: 0.5rem; font-family: var(--font-mono); letter-spacing: 0.05em; }
+    .reveal { opacity: 0; transform: translateY(30px); transition: opacity 0.8s var(--ease-snappy), transform 0.8s var(--ease-snappy); }
+    .slide.active .reveal { opacity: 1; transform: translateY(0); }
+    .slide.active .del-1 { transition-delay: 0.1s; }
+    .slide.active .del-2 { transition-delay: 0.2s; }
+    .slide.active .del-3 { transition-delay: 0.3s; }
+    .slide.active .del-4 { transition-delay: 0.4s; }
+    .hero-container { display: flex; flex-direction: column; justify-content: center; height: 100%; position: relative; }
+    .hero-number-bg {
+      position: absolute; top: 40%; left: 50%; transform: translate(-50%, -50%);
+      font-family: var(--font-display); font-size: 35vw; font-weight: 800; color: transparent;
+      -webkit-text-stroke: 1px var(--border-strong); z-index: -1; pointer-events: none; white-space: nowrap;
+    }
+    .cover-meta { display: flex; gap: 2rem; margin-top: 4.5rem; }
+    .cyber-flow { display: flex; justify-content: space-between; align-items: flex-start; margin-top: 4rem; position: relative; }
+    .cyber-flow::after {
+      content: ''; position: absolute; top: 30px; left: 5%; right: 5%; height: 1px;
+      background: repeating-linear-gradient(90deg, var(--border-strong) 0, var(--border-strong) 5px, transparent 5px, transparent 10px);
+      z-index: -1;
+    }
+    .flow-node { text-align: center; width: 18%; }
+    .node-icon {
+      width: 60px; height: 60px; margin: 0 auto 1.5rem; background: var(--bg-surface); border: 1px solid var(--border-strong);
+      border-radius: 12px; display: grid; place-items: center; transition: all 0.3s ease;
+    }
+    .flow-node:hover .node-icon { border-color: var(--radium); box-shadow: 0 0 20px var(--radium-dim); transform: scale(1.1); }
+    .node-icon svg { width: 24px; height: 24px; fill: none; stroke: var(--text-pure); stroke-width: 2; transition: stroke 0.3s; }
+    .flow-node:hover .node-icon svg { stroke: var(--radium); }
+    .split-board { display: flex; height: 60vh; margin-top: 3rem; border: 1px solid var(--border-strong); border-radius: 1rem; overflow: hidden; }
+    .split-side { flex: 1; padding: 4rem; display: flex; flex-direction: column; }
+    .split-left { background: rgba(10,10,14,0.8); border-right: 1px solid var(--border-strong); }
+    .split-right { background: rgba(20,20,25,0.9); position: relative; }
+    .split-right::before { content:''; position:absolute; inset:0; background: radial-gradient(circle at top right, var(--radium-dim), transparent 60%); pointer-events: none;}
+    .split-list { list-style: none; margin-top: 2rem; display: flex; flex-direction: column; gap: 1.5rem; }
+    .split-list li { display: flex; gap: 1rem; align-items: flex-start; font-size: 1.1rem; }
+    .split-list li::before { content: '×'; font-family: var(--font-mono); color: var(--alert); font-weight: bold; }
+    .split-right .split-list li::before { content: '→'; color: var(--radium); }
+    .glass-card .split-list li::before { content: '→'; color: var(--radium); }
+    .hud-container { background: #000; border: 1px solid #333; border-radius: 8px; box-shadow: 0 20px 50px rgba(0,0,0,0.8); overflow: hidden; font-family: var(--font-mono); position: relative; }
+    .hud-container::before { content: ''; position: absolute; inset: 0; background: linear-gradient(to bottom, transparent 50%, rgba(0, 255, 65, 0.05) 51%); background-size: 100% 4px; pointer-events: none; z-index: 2; }
+    .hud-container::after { content: ''; position: absolute; top: 0; left: 0; width: 100%; height: 10px; background: rgba(0, 255, 65, 0.2); opacity: 0.5; filter: blur(4px); animation: scanline 4s linear infinite; pointer-events: none; z-index: 3; }
+    @keyframes scanline { 0% { top: -10%; } 100% { top: 110%; } }
+    .hud-header { background: #111; padding: 0.75rem 1rem; display: flex; gap: 8px; border-bottom: 1px solid #222; }
+    .hud-dot { width: 10px; height: 10px; border-radius: 50%; background: #333; }
+    .hud-dot:nth-child(1) { background: #FF3B30; } .hud-dot:nth-child(2) { background: #FFCC00; } .hud-dot:nth-child(3) { background: #28CD41; }
+    .hud-body { padding: 2rem; color: #00FF41; font-size: 0.95rem; line-height: 1.8; position: relative; z-index: 1;}
+    .hud-alert { border: 1px solid #FF3B30; color: #FF3B30; padding: 1rem; margin-bottom: 1.5rem; background: rgba(255,59,48,0.1); }
+    .type-line { overflow: hidden; white-space: nowrap; width: 0; border-right: 2px solid transparent; }
+    .slide.active .hud-alert.type-line { animation: typing 0.5s steps(30, end) 0.2s forwards; }
+    .slide.active .type-2 { animation: typing 0.5s steps(30, end) 0.8s forwards; }
+    .slide.active .type-3 { animation: typing 0.5s steps(30, end) 1.4s forwards; }
+    .slide.active .type-4 { animation: typing 0.5s steps(30, end) 2.0s forwards; }
+    .slide.active .type-5 { animation: typing 0.5s steps(30, end) 2.6s forwards; }
+    .slide.active .type-6 { animation: typing 0.5s steps(30, end) 3.2s forwards; }
+    .slide.active .type-7 { animation: typing 0.5s steps(30, end) 3.8s forwards; }
+    .slide.active .type-8 { animation: typing 0.5s steps(30, end) 4.4s forwards; }
+    .slide.active .typewriter { animation: typing 1s steps(40, end) 5.0s forwards, blink 0.75s step-end infinite; border-right: 2px solid #00FF41; }
+    @keyframes typing { from { width: 0 } to { width: 100% } }
+    @keyframes blink { from, to { border-color: transparent } 50% { border-color: #00FF41; } }
+    @media(max-width: 1024px) {
+      .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; gap: 2rem; }
+      .split-board { flex-direction: column; height: auto; }
+      .cyber-flow { flex-direction: column; gap: 2rem; align-items: center; }
+      .cyber-flow::after { display: none; }
+      .flow-node { width: 100%; display: flex; align-items: center; text-align: left; gap: 1rem; }
+      .node-icon { margin: 0; }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="progress-bar-container">
+    <div class="progress-bar-fill" id="progress-bar"></div>
+  </div>
+
+  <div class="ambient-glow"></div>
+  <div class="ambient-glow secondary"></div>
+  <div class="noise-overlay"></div>
+
+  <header class="global-header">
+    <div class="logo-container">
+      <svg class="logo-svg" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M50 5 L90 25 V75 L50 95 L10 75 V25 Z" fill="#0A0A0E" stroke="rgba(255,255,255,0.16)" stroke-width="2"/>
+        <path d="M50 25 L75 37.5 V62.5 L50 75 L25 62.5 V37.5 Z" stroke="var(--radium)" stroke-width="3"/>
+        <circle cx="50" cy="50" r="6" fill="var(--radium)"/>
+        <path d="M50 5 V25 M90 25 L75 37.5 M90 75 L75 62.5 M50 95 V75 M10 75 L25 62.5 M10 25 L25 37.5" stroke="rgba(255,255,255,0.16)" stroke-width="2"/>
+        <path d="M50 50 H75" stroke="var(--radium)" stroke-width="2" stroke-dasharray="2 4"/>
+      </svg>
+      <div class="logo-text">Churn<span>Guard</span></div>
+    </div>
+  </header>
+
+  <nav class="nav-glass">
+    <button class="nav-btn" id="btn-prev" aria-label="Slide Anterior">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
+    </button>
+    <div class="nav-indicator">
+      <span id="current-slide">01</span> <span class="text-muted">/ 13</span>
+    </div>
+    <button class="nav-btn" id="btn-next" aria-label="Próximo Slide">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+    </button>
+  </nav>
+
+  <main class="deck-container">
+    
+    <section class="slide active">
+      <div class="hero-container">
+        <div class="hero-number-bg">US$136B</div>
+        <div class="mono-label reveal" style="margin-bottom: 1rem;">Dossiê de Inteligência de Retenção</div>
+        <h1 class="headline-mega reveal del-1">
+          O custo<br><span class="text-radium">do silêncio.</span>
+        </h1>
+        <p class="reveal del-2" style="max-width: 650px; font-size: 1.25rem; margin-top: 2rem; color: var(--text-muted);">
+          Empresas SaaS nos EUA acumulam <strong>US$ 136 bilhões em perdas evitáveis por ano</strong> porque descobrem o cancelamento tarde demais. O ChurnGuard transforma previsão baseada em dados em <strong>ação inevitável</strong>.
+          <small class="source-note">Fonte: Bain &amp; Company / Forrester Research</small>
+        </p>
+        
+        <div class="cover-meta reveal del-3">
+          <span class="tag tag-radium">MVP Validado</span>
+          <span class="tag">Machine Learning</span>
+          <span class="tag">Assistente Virtual (Bot)</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="slide">
+      <div class="mono-label slide-header-label reveal">01 // O Problema e a Indústria</div>
+      <h2 class="headline-1 reveal del-1" style="margin-bottom: 3rem;">O assassino silencioso<br>da <span class="text-uv">receita recorrente.</span></h2>
+      
+      <div class="grid-2">
+        <div class="reveal del-2">
+          <p style="font-size: 1.2rem; color: var(--text-muted); margin-bottom: 2rem;">
+            O churn não é um evento isolado, é uma deterioração progressiva. O benchmark de cancelamentos para SaaS B2B SMB situa-se entre <strong>3% e 5% ao mês</strong>. Ignorar o comportamento do usuário é sangrar receita.
+            <small class="source-note">Fonte: ProfitWell / High Alpha &amp; OpenView SaaS Benchmarks 2024</small>
+          </p>
+          
+          <div class="glass-card" style="padding: 2rem;">
+            <div class="mono-label text-radium" style="margin-bottom: 1.5rem; font-size: 0.9rem;">
+              Taxa de Mortalidade (Churn)
+            </div>
+            <p class="text-muted" style="font-size: 0.95rem; margin-bottom: 1.5rem; line-height: 1.5;">
+              A porcentagem de clientes que cancelam o serviço mensalmente. O mercado define limites claros de sobrevivência baseados no Perfil de Cliente Ideal (ICP).
+            </p>
+            
+            <div class="benchmark-row">
+              <span>SMB <span class="text-muted" style="font-size: 0.85em;">(&lt; $1M ARR)</span></span>
+              <span class="text-radium">
+                <span class="data-counter" data-target="3">0</span><span class="clean-dash">-</span><span class="data-counter" data-target="5">0</span><span class="unit" style="font-size: 1rem; color: inherit;">%</span>
+              </span>
+            </div>
+            <div class="benchmark-row">
+              <span>Mid-Market <span class="text-muted" style="font-size: 0.85em;">(Médias)</span></span>
+              <span class="text-radium">
+                <span class="data-counter" data-target="2">0</span><span class="clean-dash">-</span><span class="data-counter" data-target="3">0</span><span class="unit" style="font-size: 1rem; color: inherit;">%</span>
+              </span>
+            </div>
+            <div class="benchmark-row">
+              <span>Enterprise <span class="text-muted" style="font-size: 0.85em;">(Grandes Corp.)</span></span>
+              <span class="text-radium">0.5 <span class="clean-dash">-</span> 1.5%</span>
+            </div>
+
+            <div class="card-citation">Fontes: ProfitWell 2024 / High Alpha &amp; OpenView Benchmarks</div>
+          </div>
+        </div>
+        
+        <div class="grid-2 reveal del-3" style="gap: 1rem;">
+          <div class="glass-card">
+            <div class="data-value"><span class="data-counter" data-target="23">0</span><span class="unit">%</span></div>
+            <p class="mono-label" style="color: var(--text-pure); margin-bottom: 0.5rem;">Onboarding Falho</p>
+            <p class="text-muted" style="font-size: 0.85rem; line-height: 1.4;">Primeira experiência frustrante afasta usuários na semana 1.</p>
+          </div>
+          <div class="glass-card">
+            <div class="data-value"><span class="data-counter" data-target="21">0</span><span class="unit">%</span></div>
+            <p class="mono-label" style="color: var(--text-pure); margin-bottom: 0.5rem;">Engajamento Morto</p>
+            <p class="text-muted" style="font-size: 0.85rem; line-height: 1.4;">O usuário para de usar a ferramenta meses antes do "cancelar".</p>
+          </div>
+          <div class="glass-card">
+            <div class="data-value"><span class="data-counter" data-target="16">0</span><span class="unit">%</span></div>
+            <p class="mono-label" style="color: var(--text-pure); margin-bottom: 0.5rem;">Suporte Crítico</p>
+            <p class="text-muted" style="font-size: 0.85rem; line-height: 1.4;">Tickets não resolvidos rapidamente destroem a confiança no sistema.</p>
+          </div>
+          <div class="glass-card card-alert" style="background: rgba(255,42,42,0.05); border-color: rgba(255,42,42,0.2);">
+            <div class="data-value"><span class="data-counter" data-target="73">0</span><span class="unit">%</span></div>
+            <p class="mono-label text-alert" style="margin-bottom: 0.5rem;">Voam às cegas</p>
+            <p class="text-muted" style="font-size: 0.85rem; line-height: 1.4;">Empresas que não monitoram retenção de forma proativa.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="slide" style="justify-content: center;">
+      <div class="mono-label slide-header-label reveal">02 // O Preço da Inércia (Cost of Inaction)</div>
+      
+      <div class="grid-2" style="align-items: center;">
+        <div class="reveal del-1">
+          <h2 class="headline-mega text-alert" style="font-size: clamp(3rem, 7vw, 7rem); line-height: 0.9;">O Sangramento<br>Ativo.</h2>
+          <p style="font-size: 1.2rem; color: var(--text-muted); margin: 2rem 0;">
+            Cada 30 dias de deliberação sem um sistema de retenção preditiva ativa equivale à perda irremediável de MRR (Receita Mensal Recorrente). Uma operação que fatura R$ 10M/ano com churn de 5% sangra capital que não precisava perder.
+          </p>
+          <span class="tag tag-alert">A inércia não é neutra. Ela custa caro.</span>
+        </div>
+        
+        <div class="glass-card card-alert reveal del-2" style="background: rgba(255,42,42,0.03); border-color: rgba(255,42,42,0.3); padding: 4rem; text-align: center;">
+          <div class="mono-label text-alert" style="margin-bottom: 1rem; font-size: 1rem;">Perda Projetada (Cenário Base)</div>
+          <div class="data-value" style="font-size: 5rem;">
+            <span class="unit" style="font-size: 2.5rem; vertical-align: top;">-R$</span><span class="data-counter" data-target="500">0</span><span class="unit" style="font-size: 2.5rem; vertical-align: bottom;">k</span>
+          </div>
+          <p class="text-muted" style="margin-top: 1rem;">Vazamento de capital desnecessário a cada ano por falta de ação preventiva na base de clientes.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="slide">
+      <div class="mono-label slide-header-label reveal">03 // A Janela de Oportunidade</div>
+      <h2 class="headline-1 reveal del-1" style="margin-bottom: 3rem;">A matemática da<br><span class="text-radium">retenção agressiva.</span></h2>
+
+      <div class="grid-3 reveal del-2">
+        <div class="glass-card">
+          <div class="mono-label">Retenção Líquida (NRR)</div>
+          <div class="data-value"><span class="data-counter" data-target="101">0</span><span class="unit">%</span></div>
+          <p class="text-muted">A média real (mediana) de retenção de receita líquida de empresas privadas de software em escala no mercado global.</p>
+          <div class="card-citation">Fonte: KeyBanc SaaS Survey 2024</div>
+        </div>
+        <div class="glass-card">
+          <div class="mono-label">Eficiência de Capital (CAC)</div>
+          <div class="data-value">
+            <span class="data-counter" data-target="5">0</span><span class="clean-dash" style="font-size: 2rem;">-</span><span class="data-counter" data-target="25">0</span><span class="unit">x</span>
+          </div>
+          <p class="text-muted">Proporção de custo. É de 5 a 25 vezes mais caro adquirir um cliente novo do que reter e expandir um cliente da sua base.</p>
+          <div class="card-citation">Fonte: Harvard Business Review (2014)</div>
+        </div>
+        <div class="glass-card" style="border-color: var(--radium);">
+          <div class="mono-label text-radium">Alavanca de Lucro (Valuation)</div>
+          <div class="data-value text-radium">+<span class="data-counter" data-target="95" style="color: inherit;">0</span><span class="unit" style="color: inherit;">%</span></div>
+          <p class="text-muted">Aumento nos lucros gerado por um aumento de meros 5% na taxa de retenção. O <em>valuation</em> sobe exponencialmente.</p>
+          <div class="card-citation" style="border-color: rgba(204,255,0,0.2);">Fonte: Reichheld / Bain &amp; Company</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="slide">
+      <div class="mono-label slide-header-label reveal">04 // A Solução</div>
+      
+      <div class="grid-2" style="align-items: center; height: 100%;">
+        <div class="reveal del-1">
+          <h2 class="headline-mega" style="font-size: clamp(3rem, 6vw, 6rem);">Prever.<br>Alertar.<br>Reter.</h2>
+          <p style="font-size: 1.2rem; color: var(--text-muted); margin: 2rem 0;">
+            O <strong>ChurnGuard</strong> não é um dashboard passivo. É um sistema nervoso central que transforma risco preditivo em um assistente virtual ativo para sua equipe.
+          </p>
+        </div>
+
+        <div class="grid-1 reveal del-2" style="display: grid; gap: 1.5rem;">
+          <div class="glass-card" style="padding: 1.5rem 2rem;">
+            <h3 style="font-size: 1.5rem; margin-bottom: 0.5rem;"><span class="text-radium">01.</span> Inteligência</h3>
+            <p class="text-muted">O algoritmo de <em>Regressão Logística</em> cruza padrões contratuais e comportamentais ocultos para calcular a nota de risco exata do cliente com alta interpretabilidade.</p>
+          </div>
+          <div class="glass-card" style="padding: 1.5rem 2rem;">
+            <h3 style="font-size: 1.5rem; margin-bottom: 0.5rem;"><span class="text-radium">02.</span> Sob Demanda</h3>
+            <p class="text-muted">Sua equipe consulta o Chatbot diretamente pelo Telegram, pedindo dados específicos (ex: "clientes acima de 70% de risco").</p>
+          </div>
+          <div class="glass-card" style="padding: 1.5rem 2rem;">
+            <h3 style="font-size: 1.5rem; margin-bottom: 0.5rem;"><span class="text-radium">03.</span> Ação Frictionless</h3>
+            <p class="text-muted">O bot responde com o link direto para o perfil do cliente no seu CRM. Foco total em intervir e salvar o contrato.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="slide">
+      <div class="mono-label slide-header-label reveal">05 // Arquitetura Técnica</div>
+      <h2 class="headline-1 reveal del-1" style="margin-bottom: 2rem;">Pipeline <span class="text-uv">Cibernético.</span></h2>
+
+      <div class="cyber-flow reveal del-2">
+        <div class="flow-node">
+          <div class="node-icon"><svg><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg></div>
+          <h4 style="font-size: 1.2rem; margin-bottom: 0.5rem;">1. Ingestão</h4>
+          <p class="mono-label" style="text-transform: none;">Coleta de dados brutos do CRM/Banco de Dados.</p>
+        </div>
+        <div class="flow-node">
+          <div class="node-icon"><svg><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></div>
+          <h4 style="font-size: 1.2rem; margin-bottom: 0.5rem;">2. Preparo</h4>
+          <p class="mono-label" style="text-transform: none;">Limpeza e <em>Feature Engineering</em> (Pandas).</p>
+        </div>
+        <div class="flow-node">
+          <div class="node-icon"><svg><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></div>
+          <h4 style="font-size: 1.2rem; margin-bottom: 0.5rem;">3. Inferência</h4>
+          <p class="mono-label" style="text-transform: none;">A Regressão Logística calcula a probabilidade.</p>
+        </div>
+        <div class="flow-node">
+          <div class="node-icon"><svg><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg></div>
+          <h4 style="font-size: 1.2rem; margin-bottom: 0.5rem;">4. Interface</h4>
+          <p class="mono-label" style="text-transform: none;">Chatbot pronto para receber consultas webhooks.</p>
+        </div>
+        <div class="flow-node">
+          <div class="node-icon" style="border-color: var(--radium);"><svg stroke="var(--radium)"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></div>
+          <h4 style="font-size: 1.2rem; margin-bottom: 0.5rem; color: var(--radium);">5. Ação</h4>
+          <p class="mono-label" style="text-transform: none; color: var(--text-pure);">Bot fornece links diretos para a equipe atuar.</p>
+        </div>
+      </div>
+      
+      <div class="glass-card reveal del-3" style="margin-top: 4rem; text-align: center; padding: 1.5rem;">
+        <span class="mono-label text-radium">Stack do Projeto:</span> Python · Pandas · Scikit-Learn (Logistic Regression) · SHAP · Telegram Bot API
+      </div>
+    </section>
+
+    <section class="slide" style="justify-content: center;">
+      <div class="mono-label slide-header-label reveal">06 // Adoção e Time-to-Value (TTV)</div>
+      
+      <div class="grid-2" style="align-items: center;">
+        <div class="glass-card reveal del-2" style="background: var(--radium-dim); border-color: var(--radium); padding: 4rem; text-align: center;">
+          <div class="mono-label text-radium" style="margin-bottom: 1rem; font-size: 1rem;">Tempo de Implementação MVP</div>
+          <div class="data-value text-radium" style="font-size: 5rem;">
+            <span class="data-counter" data-target="2">0</span><span class="unit" style="font-size: 2.5rem; vertical-align: bottom; margin-left: 0.5rem; color: var(--text-pure);">Semanas</span>
+          </div>
+          <p class="text-pure" style="margin-top: 1rem; font-size: 1.1rem;">Da ingestão do CSV histórico até o Chatbot rodando nas mãos do CS.</p>
+        </div>
+
+        <div class="reveal del-1">
+          <h2 class="headline-mega" style="font-size: clamp(3rem, 6vw, 6rem); line-height: 0.9;">Integração<br><span class="text-radium">Frictionless.</span></h2>
+          <p style="font-size: 1.2rem; color: var(--text-muted); margin: 2rem 0;">
+            A maior barreira para contratar um software é a lentidão e o bloqueio da equipe de TI. Nossa arquitetura elimina esse atrito.<br><br>
+            <strong>Como funciona?</strong> No MVP, não precisamos integrar chaves de API complexas no primeiro dia. Você exporta uma planilha (CSV) com histórico mínimo de 6 meses, nosso motor calibra o modelo e, em aproximadamente <strong>2 semanas</strong>, o Chatbot nasce configurado para a sua realidade. Zero refatoração de sistemas.
+            <small class="source-note">*Tempo estimado considerando dataset histórico organizado e acesso básico via API.</small>
+          </p>
+          <span class="tag tag-radium">Plug &amp; Play Operacional</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="slide" style="justify-content: center;">
+      <div class="mono-label slide-header-label reveal">07 // Validação de Performance e Dados</div>
+      
+      <div class="grid-2" style="align-items: center;">
+        <div class="reveal del-1">
+          <h2 class="headline-mega" style="font-size: clamp(3rem, 6vw, 6rem); line-height: 0.9;">A verdade<br>nos <span class="text-radium">Dados.</span></h2>
+          <p style="font-size: 1.2rem; color: var(--text-muted); margin: 2rem 0;">
+            Nós não vendemos uma caixa preta. O ChurnGuard utiliza <strong>análise SHAP</strong> — padrão ouro de explicabilidade em Machine Learning — para que sua equipe saiba <strong>exatamente o porquê</strong> cada alerta foi disparado, variável por variável, cliente por cliente.
+          </p>
+          <span class="tag tag-radium">Interpretabilidade Total</span>
+        </div>
+
+        <div class="grid-1 reveal del-2" style="display: grid; gap: 1.5rem;">
+          <div class="glass-card" style="padding: 2rem;">
+            <div class="mono-label text-radium" style="margin-bottom: 1rem;">Top 3 Features (SHAP Importance)</div>
+            <div class="benchmark-row" style="font-size: 1rem;">
+              <span>🥇 <strong>Contract_Two year</strong></span>
+              <span class="text-radium">0.4824</span>
+            </div>
+            <div class="benchmark-row" style="font-size: 1rem;">
+              <span>🥈 <strong>tenure</strong> (tempo de casa)</span>
+              <span class="text-radium">0.3808</span>
+            </div>
+            <div class="benchmark-row" style="font-size: 1rem;">
+              <span>🥉 <strong>PaperlessBilling</strong></span>
+              <span class="text-radium">0.2969</span>
+            </div>
+            <p class="text-muted" style="font-size: 0.85rem; margin-top: 1rem;">Impacto médio absoluto no output do modelo (mean |SHAP|).</p>
+          </div>
+          
+          <div class="glass-card" style="padding: 2rem;">
+            <h4 style="font-size: 1.1rem; margin-bottom: 1rem; border-bottom: 1px solid var(--border-strong); padding-bottom: 0.5rem;">Cenário de Teste Validado</h4>
+            <ul class="split-list" style="margin-top: 0; gap: 0.8rem;">
+              <li style="font-size: 0.95rem; align-items: center;"><strong>Domínio:</strong> SaaS Telco (Anonimizado)</li>
+              <li style="font-size: 0.95rem; align-items: center;"><strong>Modelo:</strong> Regressão Logística + Explicabilidade SHAP</li>
+              <li style="font-size: 0.95rem; align-items: center; color: var(--radium);"><strong>Insight Crítico:</strong> 47,7% de churn nos primeiros 12 meses — janela de ouro para intervenção.</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="slide">
+      <div class="mono-label slide-header-label reveal">08 // Insights Acionáveis Descobertos</div>
+      <h2 class="headline-1 reveal del-1" style="margin-bottom: 2rem;">Os dados <span class="text-radium">não mentem.</span></h2>
+      <p class="reveal del-2" style="font-size: 1.15rem; color: var(--text-muted); max-width: 800px; margin-bottom: 3rem;">
+        Cada padrão abaixo foi <strong>descoberto pelo modelo</strong>, não inventado em uma reunião. São oportunidades de receita esperando ação.
+      </p>
+
+      <div class="grid-3 reveal del-3">
+        <div class="glass-card card-alert" style="background: rgba(255,42,42,0.05); border-color: rgba(255,42,42,0.3);">
+          <div class="mono-label text-alert" style="margin-bottom: 0.5rem;">Janela Crítica</div>
+          <div class="data-value">
+            <span class="data-counter" data-target="47.7" data-decimals="1">0</span><span class="unit">%</span>
+          </div>
+          <h3 style="font-size: 1.3rem; margin-bottom: 0.5rem;">Churn nos primeiros 12 meses</h3>
+          <p class="text-muted" style="font-size: 0.9rem;">Quase metade dos clientes cancela no primeiro ano. É aqui que o ChurnGuard mais salva dinheiro — onboarding reforçado vira ROI imediato.</p>
+        </div>
+
+        <div class="glass-card">
+          <div class="mono-label text-radium" style="margin-bottom: 0.5rem;">Antídoto #1</div>
+          <div class="data-value text-radium">
+            <span class="data-counter" data-target="9.5" data-decimals="1">0</span><span class="unit">%</span>
+          </div>
+          <h3 style="font-size: 1.3rem; margin-bottom: 0.5rem;">Churn após 4 anos</h3>
+          <p class="text-muted" style="font-size: 0.9rem;">Cliente fidelizado é cliente lucrativo. Migrar contratos mensais para bianuais é a alavanca mais poderosa identificada pelo modelo.</p>
+        </div>
+
+        <div class="glass-card" style="border-color: var(--radium);">
+          <div class="mono-label text-radium" style="margin-bottom: 0.5rem;">Cross-Sell Salva</div>
+          <div class="data-value text-radium">
+            7<span class="unit">+</span>
+          </div>
+          <h3 style="font-size: 1.3rem; margin-bottom: 0.5rem;">Serviços = retenção máxima</h3>
+          <p class="text-muted" style="font-size: 0.9rem;">Clientes com 7+ produtos contratados têm churn drasticamente menor. O modelo identifica quem está pronto para upgrade.</p>
+        </div>
+      </div>
+
+      <div class="glass-card reveal del-4" style="margin-top: 2.5rem; padding: 2rem;">
+        <div class="mono-label text-radium" style="margin-bottom: 1rem;">Bandeiras Vermelhas Detectadas pelo Modelo</div>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1.5rem; font-size: 0.95rem;">
+          <div>🔴 <strong>Pagamento via Electronic Check</strong><br><span class="text-muted" style="font-size: 0.85rem;">Forte preditor positivo de churn</span></div>
+          <div>🔴 <strong>Internet Fibra Ótica isolada</strong><br><span class="text-muted" style="font-size: 0.85rem;">Sem bundle = alta evasão</span></div>
+          <div>🔴 <strong>Contrato mensal</strong><br><span class="text-muted" style="font-size: 0.85rem;">Sem compromisso = mais cancelamento</span></div>
+          <div>🟢 <strong>Dependents = Yes</strong><br><span class="text-muted" style="font-size: 0.85rem;">Clientes com família retêm mais</span></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="slide">
+      <div class="mono-label slide-header-label reveal">09 // O Contraste Estratégico</div>
+      
+      <div class="split-board reveal del-1" style="margin-top: 1rem;">
+        <div class="split-side split-left">
+          <span class="tag tag-alert" style="align-self: flex-start; margin-bottom: 2rem;">Operação Tradicional</span>
+          <h3 class="headline-2 text-alert">Reativo &amp;<br>Post-Mortem.</h3>
+          <ul class="split-list text-muted">
+            <li>Descobre o churn <strong>após</strong> o cancelamento ser efetuado.</li>
+            <li>Análise manual de métricas em dashboards complexos que ninguém olha.</li>
+            <li>Tentativa de "Winback" (resgate) de custo alto e baixíssima eficácia.</li>
+            <li>Zero visibilidade de risco em contas ativas sob demanda.</li>
+          </ul>
+        </div>
+        <div class="split-side split-right">
+          <span class="tag tag-radium" style="align-self: flex-start; margin-bottom: 2rem;">Sistema ChurnGuard</span>
+          <h3 class="headline-2 text-radium">Proativo &amp;<br>Preditivo.</h3>
+          <ul class="split-list">
+            <li>Mapeia e identifica a evasão semanas <strong>antes</strong> do usuário decidir sair.</li>
+            <li>Avaliação estatística autônoma acoplada a um assistente virtual (Bot).</li>
+            <li>Sua equipe interroga os dados livremente pelo Telegram e recebe alvos diretos.</li>
+            <li>Ação focada: links diretos para agir, sem precisar caçar clientes em listas.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="slide" id="slide-hud">
+      <div class="mono-label slide-header-label reveal">10 // Live Intel / Demo Chatbot</div>
+      
+      <div class="grid-2" style="margin-top: 1rem;">
+        <div class="reveal del-1">
+          <h2 class="headline-1" style="margin-bottom: 2rem;">Dados Sob<br><span class="text-radium">Demanda.</span></h2>
+          <p class="text-muted" style="font-size: 1.2rem; margin-bottom: 2rem;">
+            A sua equipe não precisa aprender a usar um painel novo. Pelo próprio celular ou computador, seu gerente digita um comando simples, como <strong>/risco 70</strong>. Em milissegundos, nosso bot varre a base e responde com links diretos para o CRM.
+          </p>
+          <div class="glass-card">
+            <h4 style="font-size: 1.2rem; margin-bottom: 1rem;">Protocolo de Retenção</h4>
+            <div style="display: flex; flex-direction: column; gap: 0.5rem; font-family: var(--font-mono); font-size: 0.9rem;">
+              <div style="display: flex; justify-content: space-between;"><span>Motor Analítico</span> <span class="text-radium">Logistic Regression</span></div>
+              <div style="display: flex; justify-content: space-between;"><span>Interface</span> <span class="text-radium">Telegram / Slack Bot</span></div>
+              <div style="display: flex; justify-content: space-between;"><span>Fricção da Equipe</span> <span class="text-radium">Zero (Link Direto)</span></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="hud-container reveal del-2">
+          <div class="hud-header">
+            <div class="hud-dot"></div><div class="hud-dot"></div><div class="hud-dot"></div>
+            <div style="margin-left: auto; font-size: 0.7rem; color: #555;">CHURNGUARD_BOT // TELEGRAM_API</div>
+          </div>
+          <div class="hud-body" style="font-size: 0.9rem;">
+            <div class="type-line" style="color: var(--uv); font-weight: bold;">[CS_MANAGER]: /risco 70</div>
+            <br>
+            <div class="type-line type-2" style="color: #FFF;">&gt; PROCESSANDO_BASE_PREDITIVA...</div>
+            <br>
+            <div class="type-line type-3" style="color: var(--radium); font-weight: bold;">[CHURN_BOT]: Encontrei 2 clientes em Risco Crítico (&gt;70%):</div>
+            <br>
+            <div class="type-line type-4" style="color: #FFF;">🔴 ID: 4092 - Rebeca Galdeano (Risco: <span style="color: #FF3B30;">82%</span>)</div>
+            <div class="type-line type-5" style="color: #888; font-size: 0.8rem;">&gt; Motivo: Contrato mensal + Fibra ótica isolada + 8 meses de tenure.</div>
+            <div class="type-line type-6">🔗 <a href="#" style="color: var(--uv); text-decoration: underline;">Abrir Perfil no CRM para Ação Imediata</a></div>
+            <br>
+            <div class="type-line type-7" style="color: #FFF;">🔴 ID: 1055 - Emerson Da Silva (Risco: <span style="color: #FF3B30;">75%</span>)</div>
+            <div class="type-line type-8" style="color: #888; font-size: 0.8rem;">&gt; Motivo: Electronic Check + Sem TechSupport + Tenure 6m.</div>
+            <div class="type-line typewriter">🔗 <a href="#" style="color: var(--uv); text-decoration: underline;">Abrir Perfil no CRM para Ação Imediata</a></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="slide">
+      <div class="mono-label slide-header-label reveal">12 // O Impacto Composto</div>
+      <h2 class="headline-mega reveal del-1" style="font-size: clamp(3rem, 8vw, 8rem); margin: 1rem 0; color: var(--radium);">
+        Efeito <span style="color: var(--text-pure);">Bola de Neve.</span>
+      </h2>
+
+      <div class="grid-3 reveal del-2">
+        <div style="border-top: 2px solid var(--border-strong); padding-top: 1.5rem;">
+          <div class="data-value">5-10<span class="unit">%</span></div>
+          <h3 style="font-size: 1.5rem; margin-bottom: 1rem;">Efeito Composto (ARR)</h3>
+          <p class="text-muted">A matemática favorece a retenção: cada <strong>1% evitado</strong> na taxa de churn se converte em aproximadamente 5 a 10% de expansão orgânica no ARR ao longo do tempo.</p>
+          <small class="source-note">Fonte: Modelagem baseada em McKinsey SaaS Studies</small>
+        </div>
+        <div style="border-top: 2px solid var(--border-strong); padding-top: 1.5rem;">
+          <div class="data-value">↑ LTV</div>
+          <h3 style="font-size: 1.5rem; margin-bottom: 1rem;">Lifetime Value (LTV)</h3>
+          <p class="text-muted">Manter a base ativa constrói confiança. Isso viabiliza campanhas de <em>upsell</em>, aumentando dramaticamente o valor financeiro do ciclo de vida de cada conta.</p>
+        </div>
+        <div style="border-top: 2px solid var(--radium); padding-top: 1.5rem;">
+          <div class="data-value text-radium">2x+</div>
+          <h3 style="font-size: 1.5rem; margin-bottom: 1rem;">O Valuation Dispara</h3>
+          <p class="text-muted">Fundos avaliam o risco pela retenção. Empresas com <strong>churn abaixo de 5%</strong> negociam múltiplos até <strong>2x maiores</strong> em rodadas de M&amp;A.</p>
+          <small class="source-note">Fonte: Benchmark Capital / SaaS Capital Index</small>
+        </div>
+      </div>
+    </section>
+
+    <section class="slide">
+      <div class="mono-label slide-header-label reveal">13 // Roadmap Estratégico</div>
+      
+      <div class="grid-4 reveal del-1" style="margin-top: 2rem;">
+        
+        <div class="glass-card" style="border-color: var(--radium); background: var(--bg-glass-hover);">
+          <span class="tag tag-radium" style="margin-bottom: 1rem;">Fase 1 (Atual)</span>
+          <h3 style="font-size: 1.5rem; margin-bottom: 1rem;">MVP Validável</h3>
+          <ul class="mono-label" style="text-transform: none; line-height: 2; color: var(--text-pure);">
+            <li>Regressão Logística (2 Semanas)</li>
+            <li>Análise SHAP integrada</li>
+            <li>Assistente Virtual (Chatbot)</li>
+            <li>Links diretos para o CRM</li>
+          </ul>
+        </div>
+
+        <div class="glass-card">
+          <span class="tag" style="margin-bottom: 1rem;">Fase 2</span>
+          <h3 style="font-size: 1.5rem; margin-bottom: 1rem;">Expansão</h3>
+          <ul class="mono-label" style="text-transform: none; line-height: 2;">
+            <li>Ingestão Real via APIs</li>
+            <li>Evolução Analítica (XGBoost)</li>
+            <li>Integração no Slack / Teams</li>
+            <li>Threshold dinâmico por segmento</li>
+          </ul>
+        </div>
+
+        <div class="glass-card">
+          <span class="tag" style="margin-bottom: 1rem;">Fase 3</span>
+          <h3 style="font-size: 1.5rem; margin-bottom: 1rem;">Sistemas Cloud</h3>
+          <ul class="mono-label" style="text-transform: none; line-height: 2;">
+            <li>Implantação AWS / GCP</li>
+            <li>Fluxo de CI/CD em Nuvem</li>
+            <li>Arquitetura MLOps</li>
+            <li>Monitoramento de Desempenho</li>
+          </ul>
+        </div>
+
+        <div class="glass-card">
+          <span class="tag" style="margin-bottom: 1rem;">Fase 4</span>
+          <h3 style="font-size: 1.5rem; margin-bottom: 1rem;">SaaS Produtizado</h3>
+          <ul class="mono-label" style="text-transform: none; line-height: 2;">
+            <li>Interface Analítica Completa</li>
+            <li>Estrutura de Multilocação</li>
+            <li>API de Integração Aberta</li>
+            <li>Assinatura e Monetização</li>
+          </ul>
+        </div>
+
+      </div>
+    </section>
+
+    <section class="slide" style="justify-content: center; align-items: center; text-align: center;">
+      <svg class="logo-svg reveal" style="width: 100px; height: 100px; margin-bottom: 2rem;" viewBox="0 0 100 100" fill="none">
+        <path d="M50 5 L90 25 V75 L50 95 L10 75 V25 Z" fill="#0A0A0E" stroke="var(--radium)" stroke-width="2"/>
+        <path d="M50 25 L75 37.5 V62.5 L50 75 L25 62.5 V37.5 Z" stroke="#FFF" stroke-width="2"/>
+        <circle cx="50" cy="50" r="6" fill="var(--radium)"/>
+      </svg>
+      
+      <h1 class="headline-mega reveal del-1" style="font-size: clamp(3.5rem, 9vw, 9rem);">Churn<span class="text-radium">Guard</span></h1>
+      <p class="reveal del-2" style="font-size: 1.5rem; color: var(--text-muted); max-width: 650px; margin: 1rem auto 3rem;">
+        Inteligência preditiva. Pare de adivinhar. Comece a reter.
+      </p>
+
+      <div class="mono-label reveal del-3" style="padding: 1rem 2rem; border: 1px solid var(--border-strong); border-radius: 100px;">
+        Autor: Israel Alexandre de Oliveira
+      </div>
+    </section>
+
+  </main>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      const slides = document.querySelectorAll('.slide');
+      const total = slides.length;
+      let current = 0;
+      let isAnimating = false;
+
+      const btnPrev = document.getElementById('btn-prev');
+      const btnNext = document.getElementById('btn-next');
+      const indicator = document.getElementById('current-slide');
+      const progressBar = document.getElementById('progress-bar');
+
+      const animateCounters = (slide) => {
+        const counters = slide.querySelectorAll('.data-counter');
+        counters.forEach(counter => {
+          counter.classList.remove('counted');
+          counter.innerText = "0";
+          const target = parseFloat(counter.getAttribute('data-target'));
+          const decimals = parseInt(counter.getAttribute('data-decimals') || 0);
+          const duration = 1200; 
+          let startTimestamp = null;
+          setTimeout(() => {
+            const step = (timestamp) => {
+              if (!startTimestamp) startTimestamp = timestamp;
+              const progress = Math.min((timestamp - startTimestamp) / duration, 1);
+              const easeProgress = 1 - Math.pow(1 - progress, 3);
+              const currentVal = (easeProgress * target).toFixed(decimals);
+              // Formata números grandes com separador de milhar
+              if (target >= 1000 && decimals === 0) {
+                counter.innerText = Math.floor(easeProgress * target).toLocaleString('pt-BR');
+              } else {
+                counter.innerText = currentVal;
+              }
+              if (progress < 1) {
+                window.requestAnimationFrame(step);
+              } else {
+                counter.classList.add('counted');
+                if (target >= 1000 && decimals === 0) {
+                  counter.innerText = target.toLocaleString('pt-BR');
+                } else {
+                  counter.innerText = target.toFixed(decimals);
+                }
+              }
+            };
+            window.requestAnimationFrame(step);
+          }, 300);
+        });
+      };
+
+      const resetTypingAnimations = (slide) => {
+        const typeLines = slide.querySelectorAll('.type-line');
+        if(typeLines.length > 0) {
+            typeLines.forEach(line => {
+                line.style.animation = 'none';
+                void line.offsetWidth; 
+                line.style.animation = null; 
+            });
+        }
+      }
+
+      const updateUI = () => {
+        indicator.textContent = String(current + 1).padStart(2, '0');
+        btnPrev.disabled = current === 0;
+        btnNext.disabled = current === total - 1;
+        progressBar.style.width = `${((current + 1) / total) * 100}%`;
+      };
+
+      const goToSlide = (index) => {
+        if (isAnimating || index < 0 || index >= total || index === current) return;
+        isAnimating = true;
+        slides[current].classList.remove('active');
+        current = index;
+        slides[current].classList.add('active');
+        updateUI();
+        animateCounters(slides[current]);
+        resetTypingAnimations(slides[current]);
+        setTimeout(() => { isAnimating = false; }, 800);
+      };
+
+      btnPrev.addEventListener('click', () => goToSlide(current - 1));
+      btnNext.addEventListener('click', () => goToSlide(current + 1));
+
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'ArrowDown' || e.key === 'PageDown') {
+          e.preventDefault(); goToSlide(current + 1);
+        } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp' || e.key === 'PageUp') {
+          e.preventDefault(); goToSlide(current - 1);
+        } else if (e.key === 'f' || e.key === 'F') {
+          if (!document.fullscreenElement) document.documentElement.requestFullscreen();
+          else document.exitFullscreen();
+        }
+      });
+
+      let wheelTimeout;
+      document.addEventListener('wheel', (e) => {
+        if (wheelTimeout) return;
+        wheelTimeout = setTimeout(() => { wheelTimeout = null; }, 1200);
+        if (e.deltaY > 50) goToSlide(current + 1);
+        else if (e.deltaY < -50) goToSlide(current - 1);
+      }, { passive: true });
+
+      let touchStartY = 0; let touchStartX = 0;
+      document.addEventListener('touchstart', e => {
+        touchStartX = e.changedTouches[0].screenX; touchStartY = e.changedTouches[0].screenY;
+      }, { passive: true });
+
+      document.addEventListener('touchend', e => {
+        const dx = e.changedTouches[0].screenX - touchStartX;
+        const dy = e.changedTouches[0].screenY - touchStartY;
+        if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 50) {
+          if (dx < 0) goToSlide(current + 1); else goToSlide(current - 1);
+        } else if (Math.abs(dy) > 50) {
+          if (dy < 0) goToSlide(current + 1); else goToSlide(current - 1);
+        }
+      }, { passive: true });
+
+      updateUI();
+      animateCounters(slides[current]);
+    });
+  </script>
+</body>
+</html>
